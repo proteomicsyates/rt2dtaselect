@@ -40,7 +40,7 @@ public class Rt2DTASelect {
 	private final String pass;
 	private static final String HOST_NAME = "jaina.scripps.edu";
 
-	private final static Map<String, File> correspondingMs2Map = new HashMap<String, File>();
+	private final static Map<String, Set<File>> ms2ByPath = new HashMap<String, Set<File>>();
 
 	public Rt2DTASelect(File inputFolder, String userName, String password) {
 		this.inputFolder = inputFolder;
@@ -71,7 +71,7 @@ public class Rt2DTASelect {
 		}
 	}
 
-	private void run() throws IOException {
+	public void run() throws IOException {
 		File[] ms2Files = getFilesByExtension(inputFolder, "ms2", RT);
 		File[] dtaSelectFiles = getFilesByExtension(inputFolder, "txt", RT);
 		for (File dtaSelectFile : dtaSelectFiles) {
@@ -79,8 +79,10 @@ public class Rt2DTASelect {
 
 			DTASelectParser parser = new DTASelectParser(dtaSelectFile);
 			final String runPath = parser.getRunPath();
-			File ms2File = getCorrespondingMS2File(ms2Files, runPath, userName, pass, true);
-			MS2Reader ms2Reader = new MS2Reader(ms2File);
+			Set<File> ms2FileSet = getCorrespondingMS2Files(ms2Files, runPath, userName, pass, true);
+
+			Map<String, MS2Reader> ms2ReaderMap = getMSReaderMap(ms2FileSet);
+
 			BufferedWriter bw = null;
 			BufferedReader br = null;
 			// create the output file for that pair
@@ -143,6 +145,8 @@ public class Rt2DTASelect {
 								String scanNumber = FastaParser.getScanFromPSMIdentifier(psmIdentifier);
 								scanNumber += "." + scanNumber + "."
 										+ FastaParser.getChargeStateFromPSMIdentifier(psmIdentifier);
+								MS2Reader ms2Reader = ms2ReaderMap
+										.get(FastaParser.getFileNameFromPSMIdentifier(psmIdentifier));
 								final Double rt = ms2Reader.getSpectrumRTByScan(scanNumber);
 								if (rt != null) {
 									line += "\t" + rt;
@@ -175,6 +179,15 @@ public class Rt2DTASelect {
 		}
 	}
 
+	private Map<String, MS2Reader> getMSReaderMap(Set<File> ms2File) {
+		Map<String, MS2Reader> ms2ReaderMap = new HashMap<String, MS2Reader>();
+		for (File file : ms2File) {
+			String baseName = FilenameUtils.getBaseName(file.getAbsolutePath());
+			ms2ReaderMap.put(baseName, new MS2Reader(file));
+		}
+		return ms2ReaderMap;
+	}
+
 	private boolean isNumeric(String string) {
 		try {
 			Double.valueOf(string);
@@ -188,6 +201,7 @@ public class Rt2DTASelect {
 
 		return inputFolder.listFiles(new java.io.FileFilter() {
 
+			@Override
 			public boolean accept(File pathname) {
 				if (FilenameUtils.getExtension(pathname.getAbsolutePath()).equals(extension)) {
 					if (!FilenameUtils.getBaseName(pathname.getAbsolutePath()).endsWith(notEnding)) {
@@ -200,11 +214,16 @@ public class Rt2DTASelect {
 
 	}
 
-	public File getCorrespondingMS2File(File ms2File, String runPath, String userName, String password)
-			throws FileNotFoundException {
+	public File getCorrespondingMS2Files(File ms2File, String runPath, String userName, String password,
+			boolean goToServer) throws FileNotFoundException {
 		File[] files = new File[1];
 		files[0] = ms2File;
-		return getCorrespondingMS2File(files, runPath, userName, password, true);
+		final Set<File> correspondingMS2Files = getCorrespondingMS2Files(files, runPath, userName, password,
+				goToServer);
+		if (!correspondingMS2Files.isEmpty()) {
+			return correspondingMS2Files.iterator().next();
+		}
+		return null;
 	}
 
 	/**
@@ -216,35 +235,51 @@ public class Rt2DTASelect {
 	 * @return
 	 * @throws FileNotFoundException
 	 */
-	public File getCorrespondingMS2File(File[] ms2Files, String runPath, String userName, String password,
+	public Set<File> getCorrespondingMS2Files(File[] ms2Files, String runPath, String userName, String password,
 			boolean goToServer) throws FileNotFoundException {
-		if (correspondingMs2Map.containsKey(runPath)) {
-			return correspondingMs2Map.get(runPath);
-		}
+
+		// look locally
 		for (File ms2File : ms2Files) {
 			final String baseName = FilenameUtils.getBaseName(ms2File.getAbsolutePath());
-			if (runPath.contains(baseName)) {
-				correspondingMs2Map.put(runPath, ms2File);
-				return ms2File;
+			File file = new File(inputFolder.getAbsolutePath() + File.separator + baseName + ".ms2");
+			if (runPath.contains(baseName) && file.exists()) {
+				if (ms2ByPath.containsKey(runPath)) {
+					ms2ByPath.get(runPath).add(file);
+				} else {
+					Set<File> set = new HashSet<File>();
+					set.add(file);
+					ms2ByPath.put(runPath, set);
+				}
 			}
 		}
+		// if not found, go to server
 		if (goToServer) {
-			File ret = getMs2FileFromServer(ms2Files, runPath, userName, password);
-			if (ret != null) {
-				correspondingMs2Map.put(runPath, ret);
-				return ret;
+			Set<File> files = getMs2FilesFromServer(ms2Files, runPath, userName, password);
+
+			for (File file : files) {
+
+				if (ms2ByPath.containsKey(runPath)) {
+					ms2ByPath.get(runPath).add(file);
+				} else {
+					Set<File> set = new HashSet<File>();
+					set.add(file);
+					ms2ByPath.put(runPath, set);
+				}
+
 			}
 		}
-		log.warn("MS2 file not found corresponding to run path: '" + runPath + "'");
-		return null;
+
+		return ms2ByPath.get(runPath);
+
 	}
 
-	public File getMs2FileFromServer(File[] ms2Files, String runPath, String userName, String password) {
-
+	private Set<File> getMs2FilesFromServer(File[] ms2Files, String runPath, String userName, String password) {
+		Set<File> ret = new HashSet<File>();
 		JSch jsch = new JSch();
 		Session session = null;
 		try {
-			log.debug("Getting ms2 from server using remove location:");
+
+			log.debug("Getting ms2 files from server using remove location:");
 			log.debug(runPath);
 
 			session = jsch.getSession(userName, HOST_NAME, 22);
@@ -270,6 +305,7 @@ public class Rt2DTASelect {
 			final Set<LsEntry> remoteMs2Files = new HashSet<LsEntry>();
 			LsEntrySelector selector = new LsEntrySelector() {
 
+				@Override
 				public int select(LsEntry entry) {
 					final String extension2 = FilenameUtils.getExtension(entry.getFilename());
 					if ("ms2".equals(extension2)) {
@@ -280,15 +316,16 @@ public class Rt2DTASelect {
 			};
 			sftpChannel.ls(sftpChannel.pwd(), selector);
 
-			log.debug(remoteMs2Files.size() + " ms2 files detected");
+			log.debug(remoteMs2Files.size() + " ms2 files detected in remote folder");
 
 			sftpChannel.exit();
 			session.disconnect();
 			for (LsEntry lsEntry : remoteMs2Files) {
-				final File correspondingMS2File = getCorrespondingMS2File(ms2Files, lsEntry.getFilename(), userName,
-						password, false);
-				if (correspondingMS2File != null) {
-					return correspondingMS2File;
+				final String filename = lsEntry.getFilename();
+				final Set<File> correspondingMS2Files = getCorrespondingMS2Files(ms2Files, filename, userName, password,
+						false);
+				if (correspondingMS2Files != null && !correspondingMS2Files.isEmpty()) {
+					ret.addAll(correspondingMS2Files);
 				}
 			}
 			// if not local ms2 files have been returned, download them
@@ -297,16 +334,23 @@ public class Rt2DTASelect {
 						password, FilenameUtils.getName(lsEntry.getFilename()), new File(inputFolder.getAbsolutePath()
 								+ File.separator + FilenameUtils.getName(lsEntry.getFilename())));
 				remoteSSHFileReference.setRemotePath(runPath);
-				log.info("Trying to download MS2 from server...");
+				log.info(
+						"Trying to download MS2 '" + FilenameUtils.getName(lsEntry.getFilename()) + "' from server...");
 				final File downloadedMs2File = remoteSSHFileReference.getRemoteFile();
 				log.info("MS2 downloaded at : " + downloadedMs2File.getAbsolutePath() + ". File size: "
 						+ FileUtils.getDescriptiveSizeFromBytes(downloadedMs2File.length()));
-				final File correspondingMS2File = getCorrespondingMS2File(downloadedMs2File, lsEntry.getFilename(),
-						userName, password);
-				if (correspondingMS2File != null) {
-					return correspondingMS2File;
+				// final File correspondingMS2File =
+				// getCorrespondingMS2Files(downloadedMs2File,
+				// lsEntry.getFilename(),
+				// userName, password, false);
+				// if (correspondingMS2File != null) {
+				// ret.add(correspondingMS2File);
+				// }
+				if (downloadedMs2File != null && downloadedMs2File.exists()) {
+					ret.add(downloadedMs2File);
 				}
 			}
+
 		} catch (JSchException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
@@ -320,6 +364,6 @@ public class Rt2DTASelect {
 			log.warn(e.getMessage());
 
 		}
-		return null;
+		return ret;
 	}
 }
