@@ -52,36 +52,36 @@ public class Rt2DTASelect {
 		if (args.length < 3) {
 			throw new IllegalArgumentException("Usage: java -jar rt2dtaselect.jar inputFolder userName password");
 		}
-		File inputFolder = new File(args[0]);
+		final File inputFolder = new File(args[0]);
 		if (!inputFolder.exists()) {
 			throw new IllegalArgumentException("Folder '" + inputFolder.getAbsolutePath() + "' doesn't exists");
 		}
 		if (!inputFolder.isDirectory()) {
 			throw new IllegalArgumentException("'" + inputFolder.getAbsolutePath() + "' is not a folder");
 		}
-		String userName = args[1];
-		String password = args[2];
+		final String userName = args[1];
+		final String password = args[2];
 		try {
-			Rt2DTASelect rt = new Rt2DTASelect(inputFolder, userName, password);
+			final Rt2DTASelect rt = new Rt2DTASelect(inputFolder, userName, password);
 			rt.run();
 			System.exit(0);
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			e.printStackTrace();
 			System.exit(-1);
 		}
 	}
 
 	public void run() throws IOException {
-		File[] ms2Files = getFilesByExtension(inputFolder, "ms2", RT);
-		File[] dtaSelectFiles = getFilesByExtension(inputFolder, "txt", RT);
-		for (File dtaSelectFile : dtaSelectFiles) {
+		final File[] ms2Files = getFilesByExtension(inputFolder, "ms2", RT);
+		final File[] dtaSelectFiles = getFilesByExtension(inputFolder, "txt", RT);
+		for (final File dtaSelectFile : dtaSelectFiles) {
 			boolean error = false;
 
-			DTASelectParser parser = new DTASelectParser(dtaSelectFile);
+			final DTASelectParser parser = new DTASelectParser(dtaSelectFile);
 			final String runPath = parser.getRunPath();
-			Set<File> ms2FileSet = getCorrespondingMS2Files(ms2Files, runPath, userName, pass, true);
+			final Set<File> ms2FileSet = getCorrespondingMS2Files(ms2Files, runPath, userName, pass, true);
 
-			Map<String, MS2Reader> ms2ReaderMap = getMSReaderMap(ms2FileSet);
+			final Map<String, MS2Reader> ms2ReaderMap = getMSReaderMap(ms2FileSet);
 
 			BufferedWriter bw = null;
 			BufferedReader br = null;
@@ -91,14 +91,14 @@ public class Rt2DTASelect {
 			try {
 
 				log.info("Writting " + FilenameUtils.getName(fileName) + "...");
-				FileWriter fw = new FileWriter(fileName);
+				final FileWriter fw = new FileWriter(fileName);
 				bw = new BufferedWriter(fw);
-				FileReader fr = new FileReader(dtaSelectFile);
+				final FileReader fr = new FileReader(dtaSelectFile);
 				br = new BufferedReader(fr);
 				String line;
 				boolean intro = false;
 				boolean conclusion = false;
-				HashMap<String, Integer> psmHeaderPositions = new HashMap<String, Integer>();
+				final HashMap<String, Integer> psmHeaderPositions = new HashMap<String, Integer>();
 
 				while ((line = br.readLine()) != null) {
 
@@ -119,16 +119,16 @@ public class Rt2DTASelect {
 						}
 						// add RT to the end
 						if (line.startsWith("Unique")) {
-							String[] splitted = line.split("\t");
+							final String[] splitted = line.split("\t");
 							for (int position = 0; position < splitted.length; position++) {
-								String header = splitted[position];
+								final String header = splitted[position];
 								psmHeaderPositions.put(header, position);
 							}
 							line = line + "\tRT";
 							continue;
 						}
 
-						String[] elements = line.split("\t");
+						final String[] elements = line.split("\t");
 						// if (elements[1].equals("DTASelectProteins")) {
 						if (elements[1].equals("Proteins")) {
 							conclusion = true;
@@ -141,17 +141,17 @@ public class Rt2DTASelect {
 						} else {
 							// this is the case of a psm
 							try {
-								String psmIdentifier = elements[psmHeaderPositions.get(DTASelectPSM.PSM_ID)];
+								final String psmIdentifier = elements[psmHeaderPositions.get(DTASelectPSM.PSM_ID)];
 								String scanNumber = FastaParser.getScanFromPSMIdentifier(psmIdentifier);
 								scanNumber += "." + scanNumber + "."
 										+ FastaParser.getChargeStateFromPSMIdentifier(psmIdentifier);
-								MS2Reader ms2Reader = ms2ReaderMap
+								final MS2Reader ms2Reader = ms2ReaderMap
 										.get(FastaParser.getFileNameFromPSMIdentifier(psmIdentifier));
 								final Double rt = ms2Reader.getSpectrumRTByScan(scanNumber);
 								if (rt != null) {
 									line += "\t" + rt;
 								}
-							} catch (NumberFormatException e) {
+							} catch (final NumberFormatException e) {
 								error = true;
 								throw e;
 							}
@@ -160,7 +160,7 @@ public class Rt2DTASelect {
 						bw.write(line + "\n");
 					}
 				}
-			} catch (Exception e) {
+			} catch (final Exception e) {
 				e.printStackTrace();
 				error = true;
 
@@ -180,9 +180,9 @@ public class Rt2DTASelect {
 	}
 
 	private Map<String, MS2Reader> getMSReaderMap(Set<File> ms2File) {
-		Map<String, MS2Reader> ms2ReaderMap = new HashMap<String, MS2Reader>();
-		for (File file : ms2File) {
-			String baseName = FilenameUtils.getBaseName(file.getAbsolutePath());
+		final Map<String, MS2Reader> ms2ReaderMap = new HashMap<String, MS2Reader>();
+		for (final File file : ms2File) {
+			final String baseName = FilenameUtils.getBaseName(file.getAbsolutePath());
 			ms2ReaderMap.put(baseName, new MS2Reader(file));
 		}
 		return ms2ReaderMap;
@@ -192,7 +192,7 @@ public class Rt2DTASelect {
 		try {
 			Double.valueOf(string);
 			return true;
-		} catch (NumberFormatException e) {
+		} catch (final NumberFormatException e) {
 			return false;
 		}
 	}
@@ -216,7 +216,7 @@ public class Rt2DTASelect {
 
 	public File getCorrespondingMS2Files(File ms2File, String runPath, String userName, String password,
 			boolean goToServer) throws FileNotFoundException {
-		File[] files = new File[1];
+		final File[] files = new File[1];
 		files[0] = ms2File;
 		final Set<File> correspondingMS2Files = getCorrespondingMS2Files(files, runPath, userName, password,
 				goToServer);
@@ -239,14 +239,14 @@ public class Rt2DTASelect {
 			boolean goToServer) throws FileNotFoundException {
 
 		// look locally
-		for (File ms2File : ms2Files) {
+		for (final File ms2File : ms2Files) {
 			final String baseName = FilenameUtils.getBaseName(ms2File.getAbsolutePath());
-			File file = new File(inputFolder.getAbsolutePath() + File.separator + baseName + ".ms2");
+			final File file = new File(inputFolder.getAbsolutePath() + File.separator + baseName + ".ms2");
 			if (runPath.contains(baseName) && file.exists()) {
 				if (ms2ByPath.containsKey(runPath)) {
 					ms2ByPath.get(runPath).add(file);
 				} else {
-					Set<File> set = new HashSet<File>();
+					final Set<File> set = new HashSet<File>();
 					set.add(file);
 					ms2ByPath.put(runPath, set);
 				}
@@ -254,14 +254,14 @@ public class Rt2DTASelect {
 		}
 		// if not found, go to server
 		if (goToServer) {
-			Set<File> files = getMs2FilesFromServer(ms2Files, runPath, userName, password);
+			final Set<File> files = getMs2FilesFromServer(ms2Files, runPath, userName, password);
 
-			for (File file : files) {
+			for (final File file : files) {
 
 				if (ms2ByPath.containsKey(runPath)) {
 					ms2ByPath.get(runPath).add(file);
 				} else {
-					Set<File> set = new HashSet<File>();
+					final Set<File> set = new HashSet<File>();
 					set.add(file);
 					ms2ByPath.put(runPath, set);
 				}
@@ -274,8 +274,8 @@ public class Rt2DTASelect {
 	}
 
 	private Set<File> getMs2FilesFromServer(File[] ms2Files, String runPath, String userName, String password) {
-		Set<File> ret = new HashSet<File>();
-		JSch jsch = new JSch();
+		final Set<File> ret = new HashSet<File>();
+		final JSch jsch = new JSch();
 		Session session = null;
 		try {
 
@@ -287,9 +287,9 @@ public class Rt2DTASelect {
 			session.setPassword(password);
 			session.connect();
 
-			Channel channel = session.openChannel("sftp");
+			final Channel channel = session.openChannel("sftp");
 			channel.connect();
-			ChannelSftp sftpChannel = (ChannelSftp) channel;
+			final ChannelSftp sftpChannel = (ChannelSftp) channel;
 
 			final StringTokenizer stringTokenizer = new StringTokenizer(runPath, "/");
 			boolean first = true;
@@ -303,7 +303,7 @@ public class Rt2DTASelect {
 				sftpChannel.cd(folder);
 			}
 			final Set<LsEntry> remoteMs2Files = new HashSet<LsEntry>();
-			LsEntrySelector selector = new LsEntrySelector() {
+			final LsEntrySelector selector = new LsEntrySelector() {
 
 				@Override
 				public int select(LsEntry entry) {
@@ -320,7 +320,7 @@ public class Rt2DTASelect {
 
 			sftpChannel.exit();
 			session.disconnect();
-			for (LsEntry lsEntry : remoteMs2Files) {
+			for (final LsEntry lsEntry : remoteMs2Files) {
 				final String filename = lsEntry.getFilename();
 				final Set<File> correspondingMS2Files = getCorrespondingMS2Files(ms2Files, filename, userName, password,
 						false);
@@ -329,8 +329,8 @@ public class Rt2DTASelect {
 				}
 			}
 			// if not local ms2 files have been returned, download them
-			for (LsEntry lsEntry : remoteMs2Files) {
-				RemoteSSHFileReference remoteSSHFileReference = new RemoteSSHFileReference(HOST_NAME, userName,
+			for (final LsEntry lsEntry : remoteMs2Files) {
+				final RemoteSSHFileReference remoteSSHFileReference = new RemoteSSHFileReference(HOST_NAME, userName,
 						password, FilenameUtils.getName(lsEntry.getFilename()), new File(inputFolder.getAbsolutePath()
 								+ File.separator + FilenameUtils.getName(lsEntry.getFilename())));
 				remoteSSHFileReference.setRemotePath(runPath);
@@ -351,15 +351,15 @@ public class Rt2DTASelect {
 				}
 			}
 
-		} catch (JSchException e) {
+		} catch (final JSchException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
 
-		} catch (SftpException e) {
+		} catch (final SftpException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
 
-		} catch (IOException e) {
+		} catch (final IOException e) {
 			e.printStackTrace();
 			log.warn(e.getMessage());
 
